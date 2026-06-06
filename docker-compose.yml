@@ -1,0 +1,35 @@
+# Local demo stack: Redis (shared revocation store) + auth server + resource server.
+# Both services use in-memory H2, so no database container is needed.
+#
+# Usage:
+#   cp .env.example .env        # provides AUTH_SECRET
+#   docker compose up --build
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  auth-app:
+    build: .
+    image: mini-oauth2:latest
+    environment:
+      APP: auth
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      SPRING_DATA_REDIS_HOST: redis
+    ports:
+      - "9000:9000"
+    depends_on:
+      - redis
+
+  resource-app:
+    image: mini-oauth2:latest
+    environment:
+      APP: rs
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      SPRING_DATA_REDIS_HOST: redis
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
