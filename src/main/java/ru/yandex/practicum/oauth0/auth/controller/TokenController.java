@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import ru.yandex.practicum.oauth0.auth.dto.GrantType;
+import ru.yandex.practicum.oauth0.auth.dto.IntrospectRequest;
+import ru.yandex.practicum.oauth0.auth.dto.IntrospectResponse;
 import ru.yandex.practicum.oauth0.auth.dto.PasswordTokenRequest;
 import ru.yandex.practicum.oauth0.auth.dto.RefreshRequest;
 import ru.yandex.practicum.oauth0.auth.dto.RevokeRequest;
@@ -63,5 +65,13 @@ public class TokenController {
         BasicAuthCredentials credentials = BasicAuthCredentials.parse(authorization);
         tokenService.revoke(credentials.clientId(), credentials.clientSecret(), request.getToken());
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/introspect")
+    public IntrospectResponse introspect(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @Valid @RequestBody IntrospectRequest request) {
+        BasicAuthCredentials credentials = BasicAuthCredentials.parse(authorization);
+        return tokenService.introspect(credentials.clientId(), credentials.clientSecret(), request.getToken());
     }
 }

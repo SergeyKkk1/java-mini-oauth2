@@ -84,6 +84,7 @@ Or build once and run the jars: `mvn -DskipTests package` then
 | POST | `/token?grantType=CLIENT_CREDENTIALS` | `Authorization: Basic` | → access only |
 | POST | `/token/refresh` | JSON body `{refreshToken}` | rotates; replay → 400 + family revoked |
 | POST | `/token/revoke` | `Authorization: Basic` + `{token}` | always 200 on valid client auth |
+| POST | `/token/introspect` | `Authorization: Basic` + `{token}` | RFC 7662; `{active:false}` if invalid/expired/revoked |
 | GET | `/api/payments` | `Authorization: Bearer` | needs scope `payments:read` |
 | POST | `/api/payments` | `Authorization: Bearer` | needs scope `payments:write` |
 
@@ -138,6 +139,17 @@ Revoke an access token (then the resource server returns 401 for it):
 curl -i -X POST http://localhost:9000/token/revoke \
   -u 'payments-service:secret' \
   -H 'Content-Type: application/json' -d "{\"token\":\"$AT\"}"
+```
+
+Introspect a token (RFC 7662 — client-authenticated; reports `active` plus claims):
+
+```bash
+curl -s -X POST http://localhost:9000/token/introspect \
+  -u 'payments-service:secret' \
+  -H 'Content-Type: application/json' -d "{\"token\":\"$AT\"}"
+# active token => {"active":true,"scope":"payments:read payments:write","clientId":...,"sub":...,
+#                  "tokenType":"Bearer","exp":...,"iat":...,"iss":"mini-oauth2","aud":"payments-api","jti":...}
+# revoked/expired/garbage token => {"active":false}
 ```
 
 ## Tests

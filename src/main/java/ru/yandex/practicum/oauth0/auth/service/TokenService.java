@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.yandex.practicum.oauth0.auth.dto.IntrospectResponse;
 import ru.yandex.practicum.oauth0.auth.dto.TokenResponse;
 import ru.yandex.practicum.oauth0.auth.exception.OAuthException;
 import ru.yandex.practicum.oauth0.auth.model.Client;
@@ -104,6 +105,47 @@ public class TokenService {
         Instant exp = jwt.getExpiresAt() != null ? jwt.getExpiresAt() : Instant.now();
         revocationStore.revoke(jwt.getJti(), exp);
         log.info("Revoked access token jti={} on behalf of client '{}'", jwt.getJti(), clientId);
+    }
+
+    @Transactional(readOnly = true)
+    public IntrospectResponse introspect(String clientId, String clientSecret, String token) {
+        clientService.authenticate(clientId, clientSecret); // 401 if client auth fails
+
+        DecodedJwt jwt;
+        try {
+            jwt = jwtCodec.verify(token);
+            jwtCodec.checkTemporal(jwt);
+        } catch (JwtException e) {
+            log.info("Introspect: token is inactive ({})", e.getReason());
+            return IntrospectResponse.inactive();
+        }
+
+        if (revocationStore.isRevoked(jwt.getJti())) {
+            return IntrospectResponse.inactive();
+        }
+        // Refresh tokens are invalidated by rotation / family revocation in the database,
+        // not via the revocation store, so check their stored state too.
+        if (OAuthConstants.REFRESH_TOKEN_TYPE.equals(jwt.getType())) {
+            boolean usable = refreshTokenService.find(jwt.getJti())
+                    .map(stored -> !stored.isRotated())
+                    .orElse(false);
+            if (!usable) {
+                return IntrospectResponse.inactive();
+            }
+        }
+
+        return IntrospectResponse.builder()
+                .active(true)
+                .scope(jwt.getScopes().isEmpty() ? null : String.join(" ", jwt.getScopes()))
+                .clientId(jwt.getClientId())
+                .sub(jwt.getSubject())
+                .tokenType("Bearer")
+                .exp(jwt.getExpiresAt() != null ? jwt.getExpiresAt().getEpochSecond() : null)
+                .iat(jwt.getIssuedAt() != null ? jwt.getIssuedAt().getEpochSecond() : null)
+                .iss(jwt.getIssuer())
+                .aud(jwt.getAudiences().isEmpty() ? null : String.join(" ", jwt.getAudiences()))
+                .jti(jwt.getJti())
+                .build();
     }
 
     private DecodedJwt decodeRefreshToken(String refreshToken) {
